@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { actorNameFromUser } from "@/lib/crm/actor";
 import type {
   CallDisposition,
   CallSentiment,
@@ -22,6 +23,16 @@ const VALID_DISPOSITIONS = new Set([
 ]);
 const VALID_SENTIMENTS = new Set(["positive", "neutral", "negative"]);
 
+async function requireActor() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return { supabase, user: null, actorName: null as string | null };
+  return { supabase, user, actorName: actorNameFromUser(user) };
+}
+
 export async function logCall(
   leadId: string,
   input: {
@@ -31,12 +42,8 @@ export async function logCall(
     status?: string;
   },
 ): Promise<ActionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return { ok: false, error: "Not authenticated." };
+  const { supabase, user, actorName } = await requireActor();
+  if (!user || !actorName) return { ok: false, error: "Not authenticated." };
 
   if (!VALID_DISPOSITIONS.has(input.disposition)) {
     return { ok: false, error: "Invalid disposition." };
@@ -65,6 +72,7 @@ export async function logCall(
   const { error: activityError } = await supabase.from("lead_activities").insert({
     lead_id: leadId,
     user_id: user.id,
+    actor_name: actorName,
     type: "call",
     disposition,
     sentiment,
@@ -73,7 +81,21 @@ export async function logCall(
   });
 
   if (activityError) {
-    return { ok: false, error: activityError.message };
+    // Column may not exist yet — retry without actor_name
+    if (activityError.message.toLowerCase().includes("actor_name")) {
+      const { error: retryError } = await supabase.from("lead_activities").insert({
+        lead_id: leadId,
+        user_id: user.id,
+        type: "call",
+        disposition,
+        sentiment,
+        notes: input.notes.trim() || null,
+        outcome_summary: `${actorName} · ${disposition.replaceAll("_", " ")} · ${sentiment}`,
+      });
+      if (retryError) return { ok: false, error: retryError.message };
+    } else {
+      return { ok: false, error: activityError.message };
+    }
   }
 
   if (nextStatus && nextStatus !== lead.status) {
@@ -86,22 +108,24 @@ export async function logCall(
       return { ok: false, error: statusError.message };
     }
 
-    await supabase.from("lead_activities").insert({
-      lead_id: leadId,
-      user_id: user.id,
-      type: "status_change",
-      notes: `Status changed from ${lead.status} to ${nextStatus}`,
-      outcome_summary: `${lead.status} → ${nextStatus}`,
-    });
+    await insertStatusChange(
+      supabase,
+      leadId,
+      user.id,
+      actorName,
+      lead.status,
+      nextStatus,
+    );
   } else if (lead.status === "new") {
     await supabase.from("leads").update({ status: "contacted" }).eq("id", leadId);
-    await supabase.from("lead_activities").insert({
-      lead_id: leadId,
-      user_id: user.id,
-      type: "status_change",
-      notes: "Status changed from new to contacted",
-      outcome_summary: "new → contacted",
-    });
+    await insertStatusChange(
+      supabase,
+      leadId,
+      user.id,
+      actorName,
+      "new",
+      "contacted",
+    );
   }
 
   revalidatePath(`/people/${leadId}`);
@@ -109,27 +133,66 @@ export async function logCall(
   return { ok: true };
 }
 
+async function insertStatusChange(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  leadId: string,
+  userId: string,
+  actorName: string,
+  from: string,
+  to: string,
+) {
+  const payload = {
+    lead_id: leadId,
+    user_id: userId,
+    actor_name: actorName,
+    type: "status_change" as const,
+    notes: `Status changed from ${from} to ${to}`,
+    outcome_summary: `${from} → ${to}`,
+  };
+
+  const { error } = await supabase.from("lead_activities").insert(payload);
+  if (error?.message.toLowerCase().includes("actor_name")) {
+    await supabase.from("lead_activities").insert({
+      lead_id: leadId,
+      user_id: userId,
+      type: "status_change",
+      notes: `Status changed from ${from} to ${to}`,
+      outcome_summary: `${actorName} · ${from} → ${to}`,
+    });
+  }
+}
+
 export async function addNote(
   leadId: string,
   notes: string,
 ): Promise<ActionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return { ok: false, error: "Not authenticated." };
+  const { supabase, user, actorName } = await requireActor();
+  if (!user || !actorName) return { ok: false, error: "Not authenticated." };
   if (!notes.trim()) return { ok: false, error: "Note cannot be empty." };
 
   const { error } = await supabase.from("lead_activities").insert({
     lead_id: leadId,
     user_id: user.id,
+    actor_name: actorName,
     type: "note",
     notes: notes.trim(),
     outcome_summary: "Note added",
   });
 
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    if (error.message.toLowerCase().includes("actor_name")) {
+      const { error: retryError } = await supabase.from("lead_activities").insert({
+        lead_id: leadId,
+        user_id: user.id,
+        type: "note",
+        notes: notes.trim(),
+        outcome_summary: `${actorName} · Note added`,
+      });
+      if (retryError) return { ok: false, error: retryError.message };
+    } else {
+      return { ok: false, error: error.message };
+    }
+  }
 
   revalidatePath(`/people/${leadId}`);
   revalidatePath("/people");
@@ -141,12 +204,8 @@ export async function updateNote(
   activityId: string,
   notes: string,
 ): Promise<ActionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return { ok: false, error: "Not authenticated." };
+  const { supabase, user, actorName } = await requireActor();
+  if (!user || !actorName) return { ok: false, error: "Not authenticated." };
   if (!notes.trim()) return { ok: false, error: "Note cannot be empty." };
 
   const { data: activity, error: lookupError } = await supabase
@@ -168,11 +227,26 @@ export async function updateNote(
     .update({
       notes: notes.trim(),
       outcome_summary: "Note updated",
+      actor_name: actorName,
     })
     .eq("id", activityId)
     .eq("lead_id", leadId);
 
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    if (error.message.toLowerCase().includes("actor_name")) {
+      const { error: retryError } = await supabase
+        .from("lead_activities")
+        .update({
+          notes: notes.trim(),
+          outcome_summary: `${actorName} · Note updated`,
+        })
+        .eq("id", activityId)
+        .eq("lead_id", leadId);
+      if (retryError) return { ok: false, error: retryError.message };
+    } else {
+      return { ok: false, error: error.message };
+    }
+  }
 
   revalidatePath(`/people/${leadId}`);
   revalidatePath("/people");
@@ -183,12 +257,8 @@ export async function updateLeadStatus(
   leadId: string,
   status: string,
 ): Promise<ActionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return { ok: false, error: "Not authenticated." };
+  const { supabase, user, actorName } = await requireActor();
+  if (!user || !actorName) return { ok: false, error: "Not authenticated." };
   if (!VALID_STATUSES.has(status)) {
     return { ok: false, error: "Invalid status." };
   }
@@ -212,13 +282,14 @@ export async function updateLeadStatus(
 
   if (error) return { ok: false, error: error.message };
 
-  await supabase.from("lead_activities").insert({
-    lead_id: leadId,
-    user_id: user.id,
-    type: "status_change",
-    notes: `Status changed from ${lead.status} to ${status}`,
-    outcome_summary: `${lead.status} → ${status}`,
-  });
+  await insertStatusChange(
+    supabase,
+    leadId,
+    user.id,
+    actorName,
+    lead.status,
+    status,
+  );
 
   revalidatePath(`/people/${leadId}`);
   revalidatePath("/people");

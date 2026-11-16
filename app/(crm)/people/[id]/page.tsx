@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PersonWorkspace } from "@/components/crm/person-workspace";
+import { actorNameFromUser } from "@/lib/crm/actor";
 import { loadPresenceReportForLead } from "@/lib/crm/load-presence-report";
 import { createClient } from "@/lib/supabase/server";
 
@@ -11,6 +12,10 @@ export default async function PersonPage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const { data: lead, error } = await supabase
     .from("leads")
@@ -29,6 +34,11 @@ export default async function PersonPage({
     loadPresenceReportForLead(supabase, lead),
   ]);
 
+  const actorByUserId: Record<string, string> = {};
+  if (user) {
+    actorByUserId[user.id] = actorNameFromUser(user);
+  }
+
   return (
     <div className="min-h-full">
       <div className="border-b border-zinc-200 bg-white px-5 py-2 text-sm lg:hidden">
@@ -40,6 +50,7 @@ export default async function PersonPage({
         lead={lead}
         activities={activities ?? []}
         report={report}
+        actorByUserId={actorByUserId}
       />
     </div>
   );

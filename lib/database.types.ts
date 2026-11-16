@@ -11,6 +11,7 @@ export type Database = {
     Tables: {
       lead_activities: {
         Row: {
+          actor_name: string | null;
           created_at: string;
           disposition: string | null;
           id: string;
@@ -22,6 +23,7 @@ export type Database = {
           user_id: string;
         };
         Insert: {
+          actor_name?: string | null;
           created_at?: string;
           disposition?: string | null;
           id?: string;
@@ -33,6 +35,7 @@ export type Database = {
           user_id: string;
         };
         Update: {
+          actor_name?: string | null;
           created_at?: string;
           disposition?: string | null;
           id?: string;

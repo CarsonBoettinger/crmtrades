@@ -5,6 +5,10 @@ import { useState, useTransition } from "react";
 import { FileText, Pencil, Phone, RefreshCw, UserPlus, X } from "lucide-react";
 import { updateNote } from "@/app/(crm)/people/[id]/actions";
 import { RelativeTime } from "@/components/crm/relative-time";
+import {
+  resolveActivityActor,
+  resolveActivityDetail,
+} from "@/lib/crm/activity-display";
 import type { LeadActivity } from "@/lib/database.types";
 
 type TimelineItem =
@@ -23,11 +27,13 @@ export function ActivityTimeline({
   createdAt,
   activities,
   filter,
+  actorByUserId = {},
 }: {
   leadId: string;
   createdAt: string;
   activities: LeadActivity[];
   filter?: "all" | "call" | "note";
+  actorByUserId?: Record<string, string>;
 }) {
   const filtered =
     !filter || filter === "all"
@@ -54,6 +60,24 @@ export function ActivityTimeline({
         const key =
           item.kind === "created" ? `created-${item.created_at}` : item.id;
 
+        const actor =
+          item.kind === "activity"
+            ? resolveActivityActor({
+                actorName: item.actor_name,
+                outcomeSummary: item.outcome_summary,
+                userId: item.user_id,
+                actorByUserId,
+              })
+            : null;
+
+        const detail =
+          item.kind === "activity"
+            ? resolveActivityDetail({
+                outcomeSummary: item.outcome_summary,
+                actorName: item.actor_name,
+              })
+            : null;
+
         return (
           <li key={key} className="flex gap-3">
             <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-600">
@@ -61,23 +85,32 @@ export function ActivityTimeline({
             </div>
             <div className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-white px-4 py-3">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <p className="text-sm font-semibold text-zinc-900">
-                  {item.kind === "created"
-                    ? "Lead created"
-                    : item.type === "call"
-                      ? "Call logged"
-                      : item.type === "status_change"
-                        ? "Status updated"
-                        : "Note"}
-                </p>
+                <div>
+                  <p className="text-sm font-semibold text-zinc-900">
+                    {item.kind === "created"
+                      ? "Lead created"
+                      : item.type === "call"
+                        ? "Call logged"
+                        : item.type === "status_change"
+                          ? "Status updated"
+                          : "Note"}
+                  </p>
+                  {actor ? (
+                    <p className="text-xs font-medium text-zinc-500">
+                      by {actor}
+                    </p>
+                  ) : null}
+                </div>
                 <RelativeTime
                   value={item.created_at}
                   className="text-xs text-zinc-500"
                 />
               </div>
-              {item.kind === "activity" && item.type !== "note" && item.outcome_summary ? (
+              {item.kind === "activity" &&
+              item.type !== "note" &&
+              detail ? (
                 <p className="mt-1 text-xs font-medium text-emerald-800 capitalize">
-                  {item.outcome_summary}
+                  {detail}
                 </p>
               ) : null}
               {item.kind === "activity" && item.type === "note" ? (

@@ -28,10 +28,12 @@ export function PersonWorkspace({
   lead,
   activities,
   report,
+  actorByUserId = {},
 }: {
   lead: Lead;
   activities: LeadActivity[];
   report: PresencePanelReport | null;
+  actorByUserId?: Record<string, string>;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("activity");
@@ -207,6 +209,7 @@ export function PersonWorkspace({
           createdAt={lead.created_at}
           activities={activities}
           filter={tab === "activity" ? "all" : tab === "calls" ? "call" : "note"}
+          actorByUserId={actorByUserId}
         />
       </section>
 
