@@ -37,10 +37,7 @@ export function ActivityTimeline({
   const items: TimelineItem[] = [
     ...filtered.map((a): TimelineItem => ({ kind: "activity", ...a })),
     { kind: "created", created_at: createdAt } satisfies TimelineItem,
-  ].sort(
-    (a, b) =>
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-  );
+  ].sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 
   if (items.length === 0) {
     return (

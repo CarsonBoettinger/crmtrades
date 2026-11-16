@@ -1,17 +1,14 @@
 import Link from "next/link";
-import { connection } from "next/server";
 import { notFound } from "next/navigation";
 import { PersonWorkspace } from "@/components/crm/person-workspace";
+import { loadPresenceReportForLead } from "@/lib/crm/load-presence-report";
 import { createClient } from "@/lib/supabase/server";
-
-export const instant = false;
 
 export default async function PersonPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await connection();
   const { id } = await params;
   const supabase = await createClient();
 
@@ -23,21 +20,13 @@ export default async function PersonPage({
 
   if (error || !lead) notFound();
 
-  const [{ data: activities }, reportResult] = await Promise.all([
+  const [{ data: activities }, report] = await Promise.all([
     supabase
       .from("lead_activities")
       .select("*")
       .eq("lead_id", id)
       .order("created_at", { ascending: false }),
-    lead.report_id
-      ? supabase
-          .from("presence_reports")
-          .select(
-            "id, business_name, website, phone, rating, review_count, grade, overall_score, status, formatted_address, town, trade, place_id, public_payload",
-          )
-          .eq("id", lead.report_id)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
+    loadPresenceReportForLead(supabase, lead),
   ]);
 
   return (
@@ -50,7 +39,7 @@ export default async function PersonPage({
       <PersonWorkspace
         lead={lead}
         activities={activities ?? []}
-        report={reportResult.data ?? null}
+        report={report}
       />
     </div>
   );

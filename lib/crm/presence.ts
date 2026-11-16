@@ -70,9 +70,10 @@ export function googleMapsUrl(opts: {
   address?: string | null;
   businessName?: string | null;
 }) {
+  // Prefer the Places API maps URI when present — opens the GBP listing.
   if (opts.mapsUri) return opts.mapsUri;
   if (opts.placeId) {
-    return `https://www.google.com/maps/search/?api=1&query_place_id=${encodeURIComponent(opts.placeId)}`;
+    return `https://www.google.com/maps/search/?api=1&query=Google&query_place_id=${encodeURIComponent(opts.placeId)}`;
   }
   const query = [opts.businessName, opts.address].filter(Boolean).join(" ");
   if (!query) return null;

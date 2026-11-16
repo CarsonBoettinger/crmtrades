@@ -71,22 +71,9 @@ export function PresencePanel({
     <aside className="w-full shrink-0 border-t border-zinc-200 bg-zinc-50 lg:w-[340px] lg:overflow-y-auto lg:border-t-0 lg:border-l">
       <div className="space-y-4 p-4">
         <section className="rounded-xl border border-zinc-200 bg-white p-4">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <p className="text-xs font-semibold tracking-wide text-zinc-500 uppercase">
-              Google Business Profile
-            </p>
-            {mapsUrl ? (
-              <a
-                href={mapsUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 hover:underline"
-              >
-                Open Maps
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            ) : null}
-          </div>
+          <p className="mb-3 text-xs font-semibold tracking-wide text-zinc-500 uppercase">
+            Google Business Profile
+          </p>
 
           <h2 className="text-base font-semibold text-zinc-900">
             {report.business_name}
@@ -96,6 +83,18 @@ export function PresencePanel({
               .filter(Boolean)
               .join(" · ")}
           </p>
+
+          {mapsUrl ? (
+            <a
+              href={mapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-700 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-800"
+            >
+              Open Google Business Profile
+              <ExternalLink className="h-4 w-4" />
+            </a>
+          ) : null}
 
           <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
             {rating != null ? (

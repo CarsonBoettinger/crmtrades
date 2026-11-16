@@ -5,8 +5,9 @@ const nextConfig: NextConfig = {
   experimental: {
     agentFeedback: true,
   },
-  cacheComponents: true,
-  partialPrefetching: true,
+  // CRM routes are auth + request-time Supabase data; Cache Components
+  // prerender validation fights JWT expiry checks (Date.now()).
+  cacheComponents: false,
   turbopack: {
     root: __dirname,
     rules: {

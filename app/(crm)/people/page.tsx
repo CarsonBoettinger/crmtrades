@@ -1,10 +1,7 @@
 import { Suspense } from "react";
-import { connection } from "next/server";
 import { PeopleFilters } from "@/components/crm/people-filters";
 import { PeopleTable, type LeadListItem } from "@/components/crm/people-table";
 import { createClient } from "@/lib/supabase/server";
-
-export const instant = false;
 
 export default async function PeoplePage({
   searchParams,
@@ -16,7 +13,6 @@ export default async function PeoplePage({
     town?: string;
   }>;
 }) {
-  await connection();
   const params = await searchParams;
   const supabase = await createClient();
 
